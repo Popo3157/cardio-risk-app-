@@ -1,6 +1,7 @@
 import streamlit as st
-import pandas as pd
 from groq import Groq
+from fpdf import FPDF
+import base64
 
 # 1. CONFIGURATION
 st.set_page_config(page_title="L'Alliance Protectrice - Prévention Cardiaque", layout="wide")
@@ -10,6 +11,8 @@ if 'cat_risque' not in st.session_state:
     st.session_state.cat_risque = None
 if 'score_estime' not in st.session_state:
     st.session_state.score_estime = 0.0
+if 'lettre_generee' not in st.session_state:
+    st.session_state.lettre_generee = ""
 
 # 3. STYLE CSS
 st.markdown("""
@@ -27,18 +30,27 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# FONCTION POUR GÉNÉRER LE PDF
+def create_pdf(text):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    # Remplacement des caractères spéciaux pour éviter les erreurs PDF
+    clean_text = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean_text)
+    return pdf.output(dest='S').encode('latin-1')
+
 # 4. EN-TÊTE
 st.markdown('<div class="header-box">', unsafe_allow_html=True)
 st.title("🛡️ L'ALLIANCE PROTECTRICE")
 st.subheader("DÉTECTION & PRÉVENTION CARDIAQUE")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 5. BARRE LATÉRALE (Identité Médecin - Remplissage par défaut pour éviter le vide)
+# 5. BARRE LATÉRALE
 with st.sidebar:
     st.header("👨‍⚕️ Identité du Médecin")
-    dr_name = st.text_input("Nom du Docteur", value="Pauline Robert")
+    dr_name = st.text_input("Nom du Docteur", value="Dr Pauline Robert")
     specialty = st.text_input("Spécialité", "Médecine Générale")
-    cabinet = st.text_input("Cabinet / Service", "Cabinet Médical de l'Alliance")
     
     st.divider()
     st.header("🔑 Configuration IA")
@@ -68,86 +80,70 @@ def calculer_risque(age, score_val, atcd_cv, dfg, systo):
     if atcd_cv: return "Risque très élevé (Prévention secondaire)"
     if systo >= 180 or dfg == "<30 mL/min": return "Risque très élevé"
     if dfg == "30-59 mL/min": return "Risque élevé"
-    
-    if age < 50:
-        if score_val >= 7.5: return "Risque très élevé"
-        if score_val >= 2.5: return "Risque élevé"
-    elif 50 <= age < 70:
-        if score_val >= 10: return "Risque très élevé"
-        if score_val >= 5: return "Risque élevé"
-    else:
-        if score_val >= 15: return "Risque très élevé"
-        if score_val >= 7.5: return "Risque élevé"
-    return "Risque faible à modéré"
+    # Seuils simplifiés SCORE2
+    if age < 50 and score_val >= 7.5: return "Risque très élevé"
+    if 50 <= age < 70 and score_val >= 10: return "Risque très élevé"
+    if age >= 70 and score_val >= 15: return "Risque très élevé"
+    return "Risque modéré"
 
 # 8. ANALYSE
-st.header("📊 Évaluation")
-if st.button("Calculer le risque"):
-    score_final = 4.5 # Score simulé SCORE2
+if st.button("1. Calculer le risque"):
+    score_final = 4.5 
     resultat = calculer_risque(age, score_final, atcd_cv, insuffisance_renale, systolique)
     st.session_state.cat_risque = resultat
     st.session_state.score_estime = score_final
-    
-    st.success(f"Analyse terminée : {resultat}")
-    
-    if "Très élevé" in resultat: obj_ldl = "< 1.4 mmol/L"
-    elif "Élevé" in resultat: obj_ldl = "< 1.8 mmol/L"
-    else: obj_ldl = "< 2.6 mmol/L"
-    st.info(f"Cible LDL-C recommandée : {obj_ldl}")
+    st.success(f"Risque identifié : {resultat}")
 
-# 9. GÉNÉRATION DE LA LETTRE ENTIÈREMENT REMPLIE
-st.header("📝 Lettre Personnalisée Finale")
-if st.button("Générer la lettre complète"):
+# 9. GÉNÉRATION ET PDF
+st.header("📝 Lettre de Recommandation")
+if st.button("2. Générer la lettre finale"):
     if not api_key_groq:
-        st.error("Veuillez saisir votre clé API Groq dans la barre latérale.")
+        st.error("Veuillez saisir votre clé API Groq.")
     elif st.session_state.cat_risque is None:
-        st.error("Veuillez d'abord cliquer sur 'Calculer le risque' pour définir le profil du patient.")
+        st.error("Veuillez d'abord calculer le risque.")
     else:
         try:
             client = Groq(api_key=api_key_groq)
             
-            # CALCUL DE L'OBJECTIF POUR L'IA
-            if "Très élevé" in st.session_state.cat_risque: obj_ldl_ia = "inférieur à 1.4 mmol/L"
-            elif "Élevé" in st.session_state.cat_risque: obj_ldl_ia = "inférieur à 1.8 mmol/L"
-            else: obj_ldl_ia = "inférieur à 2.6 mmol/L"
+            if "Très élevé" in st.session_state.cat_risque: obj_ldl = "inférieur à 1.4 mmol/L"
+            elif "Élevé" in st.session_state.cat_risque: obj_ldl = "inférieur à 1.8 mmol/L"
+            else: obj_ldl = "inférieur à 2.6 mmol/L"
 
-            # PROMPT ULTRA-STRICT POUR ÉVITER LES CHAMPS VIDES
             prompt = f"""
-            Rédige une lettre médicale de recommandation officielle. 
-            TU NE DOIS LAISSER AUCUN TEXTE ENTRE CROCHETS []. TU DOIS REMPLIR CHAQUE ZONE.
-
-            Voici les informations obligatoires à utiliser pour construire la lettre :
-            - EXPÉDITEUR : Dr {dr_name}, spécialiste en {specialty}, exerçant au {cabinet}.
-            - DESTINATAIRE : {nom_patient}, âgé de {age} ans.
-            - BILAN : Le risque cardiovasculaire est classé comme '{st.session_state.cat_risque}' avec un score SCORE2 de {st.session_state.score_estime}%.
-            - PARAMÈTRES : Tension artérielle à {systolique} mmHg et cholestérol non-HDL à {chol_non_hdl} mmol/L.
-            - TABAC : Le patient est {fumeur if fumeur == 'Oui' else 'non-fumeur'}.
-            - OBJECTIF : La cible de cholestérol LDL-C doit être {obj_ldl_ia}.
-
-            CONSIGNES DE RÉDACTION :
-            1. Commence par l'en-tête de l'Alliance Protectrice.
-            2. Rédige une introduction expliquant le bilan.
-            3. Liste les conseils hygiéno-diététiques (sport 150min/semaine, alimentation).
-            4. Si le patient est fumeur, insiste sur l'arrêt immédiat. Sinon, félicite-le.
-            5. Signe la lettre au nom de Dr {dr_name}.
+            Rédige une lettre médicale de l'Alliance Protectrice pour le patient {nom_patient} ({age} ans).
+            L'expéditeur est le {dr_name} ({specialty}).
             
-            INTERDICTION ABSOLUE de mettre des mentions comme '[Nom du patient]' ou '[Date]'. Utilise les données fournies ci-dessus.
+            DONNÉES MÉDICALES :
+            - Risque cardiovasculaire : {st.session_state.cat_risque}
+            - Score SCORE2 : {st.session_state.score_estime}%
+            - Statut tabagique : {fumeur}
+            - Cible LDL-C : {obj_ldl}
+            
+            CONSIGNES :
+            - NE METS AUCUNE ADRESSE POSTALE (ni pour le médecin, ni pour le patient).
+            - Utilise un ton professionnel et bienveillant.
+            - Inclure les conseils : 150min sport/semaine, alimentation équilibrée, arrêt tabac si nécessaire.
+            - NE LAISSE AUCUN CHAMP VIDE ET AUCUN CROCHET []. Remplis tout le texte.
             """
             
             completion = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": "Tu es un cardiologue expert qui rédige des rapports finaux parfaits, sans aucun champ manquant."},
-                    {"role": "user", "content": prompt}
-                ]
+                messages=[{"role": "system", "content": "Tu es un cardiologue qui rédige des lettres complètes sans adresses."},
+                          {"role": "user", "content": prompt}]
             )
             
-            lettre_finale = completion.choices[0].message.content
-            st.text_area("Aperçu de la lettre (Vérifiez qu'elle est complète)", value=lettre_finale, height=500)
-            st.download_button("📥 Télécharger la lettre (TXT)", lettre_finale, file_name=f"Lettre_Alliance_{nom_patient}.txt")
+            st.session_state.lettre_generee = completion.choices[0].message.content
+            st.text_area("Aperçu du contenu", value=st.session_state.lettre_generee, height=400)
             
         except Exception as e:
-            st.error(f"Erreur de génération : {e}")
+            st.error(f"Erreur : {e}")
 
-st.divider()
-st.caption("Projet L'Alliance Protectrice - Développé par Neli Ilieva, Jennyfer Vari et Pauline Robert.")
+# BOUTON DE TÉLÉCHARGEMENT PDF (Apparaît si la lettre est générée)
+if st.session_state.lettre_generee:
+    pdf_data = create_pdf(st.session_state.lettre_generee)
+    st.download_button(
+        label="📥 Télécharger la lettre en PDF",
+        data=pdf_data,
+        file_name=f"Recommandation_{nom_patient}.pdf",
+        mime="application/pdf"
+    )
