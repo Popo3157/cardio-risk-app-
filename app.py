@@ -23,16 +23,25 @@ st.markdown("""
         border-top: 5px solid #004d99; margin-bottom: 25px; text-align: center;
         box-shadow: 0px 4px 6px rgba(0,0,0,0.05);
     }
-    h1 { color: #004d99; }
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: white;
+        color: #555;
+        text-align: center;
+        padding: 10px;
+        border-top: 1px solid #ddd;
+        font-size: 14px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# FONCTION GÉNÉRATION PDF (Mise en page hospitalière avec mentions finales)
+# FONCTION GÉNÉRATION PDF
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
-    
-    # En-tête
     pdf.set_font("Arial", 'B', 14)
     pdf.set_text_color(0, 77, 153)
     pdf.cell(0, 10, "L'ALLIANCE PROTECTRICE - UNITE DE PREVENTION CARDIOVASCULAIRE", ln=True, align='L')
@@ -40,126 +49,80 @@ def create_pdf(text):
     pdf.cell(0, 5, "Evaluation du risque SCORE2 - Guidelines SFC/ESC", ln=True, align='L')
     pdf.ln(10)
     
-    # Corps du texte
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", size=11)
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     
-    # Bas de page - Mentions de création
     pdf.ln(20)
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(0, 10, "Conception et Developpement :", ln=True, align='L')
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 5, "Jennyfer Vari, Neli Ilieva et Pauline ROBERT", ln=True, align='L')
-    
-    pdf.ln(10)
-    pdf.set_font("Arial", 'I', 9)
-    pdf.cell(0, 10, "Document genere numeriquement - Valable apres signature et cachet du praticien.", align='R')
+    pdf.cell(0, 10, "Application creee par : Jennyfer Vari, Neli Ilieva et Pauline ROBERT", ln=True, align='L')
     return pdf.output(dest='S').encode('latin-1')
 
 # 4. EN-TÊTE
 st.markdown('<div class="header-box">', unsafe_allow_html=True)
 st.title("🛡️ L'ALLIANCE PROTECTRICE")
-st.subheader("SERVICE D'ÉVALUATION DU RISQUE CARDIOVASCULAIRE")
+st.subheader("DÉTECTION & PRÉVENTION CARDIAQUE")
 st.markdown('</div>', unsafe_allow_html=True)
 
 # 5. BARRE LATÉRALE
 with st.sidebar:
     st.header("👨‍⚕️ Praticien Référent")
-    dr_nom = st.text_input("Nom et Prénom", placeholder="ex: Dr Pauline ROBERT")
-    dr_spe = st.text_input("Spécialité", placeholder="ex: Cardiologie")
-    dr_cab = st.text_input("Service / Unité", placeholder="ex: Unité de Prévention")
-    
+    dr_nom = st.text_input("Nom et Prénom", placeholder="Laisser vide pour signature manuelle")
+    dr_spe = st.text_input("Spécialité")
+    dr_cab = st.text_input("Service / Unité")
     st.divider()
-    st.header("🔑 Configuration")
     api_key_groq = st.text_input("Clé API Groq", type="password")
 
 # 6. FORMULAIRE PATIENT
 st.header("📋 Dossier Patient")
 col1, col2, col3 = st.columns(3)
-
 with col1:
-    nom_patient = st.text_input("Nom et Prénom du Patient")
+    nom_patient = st.text_input("Nom du Patient")
     age = st.number_input("Âge", min_value=18, max_value=100, value=55)
     sexe = st.radio("Sexe", ["Homme", "Femme"])
-
 with col2:
     fumeur = st.radio("Tabagisme actif", ["Non", "Oui"])
     systolique = st.number_input("PAS (mmHg)", min_value=90, max_value=200, value=130)
     chol_non_hdl = st.number_input("Cholestérol non-HDL (mmol/L)", min_value=2.0, max_value=10.0, value=3.9, step=0.1)
-
 with col3:
     diabete = st.checkbox("Diabète sucré")
     insuffisance_renale = st.selectbox("Fonction rénale (DFG)", ["Normal", "30-59 mL/min", "<30 mL/min"])
     atcd_cv = st.checkbox("ATCD cardiovasculaires avérés")
 
-# 7. LOGIQUE DE CALCUL
+# 7. CALCUL
 def calculer_risque(age_p, score_p, atcd_p, dfg_p, systo_p):
     if atcd_p: return "TRES ELEVE (Prévention secondaire)"
     if systo_p >= 180 or dfg_p == "<30 mL/min": return "TRES ELEVE"
     if dfg_p == "30-59 mL/min": return "ELEVE"
-    if age_p < 50 and score_p >= 7.5: return "TRES ELEVE"
-    if 50 <= age_p < 70 and score_p >= 10: return "TRES ELEVE"
-    if age_p >= 70 and score_p >= 15: return "TRES ELEVE"
     return "MODERE"
 
-# 8. ANALYSE
-if st.button("ÉVALUER LE PROFIL PATIENT"):
-    score_final = 4.5 
-    resultat = calculer_risque(age, score_final, atcd_cv, insuffisance_renale, systolique)
-    st.session_state.cat_risque = resultat
-    st.session_state.score_estime = score_final
-    st.success(f"Catégorie de risque : {resultat}")
+# 8. ACTIONS
+if st.button("1. ÉVALUER LE PROFIL"):
+    res = calculer_risque(age, 4.5, atcd_cv, insuffisance_renale, systolique)
+    st.session_state.cat_risque = res
+    st.success(f"Risque : {res}")
 
-# 9. GÉNÉRATION DE LA LETTRE FORMELLE
-st.header("📝 Compte-rendu de Consultation")
-if st.button("GÉNÉRER LE COMPTE-RENDU FORMEL"):
-    if not api_key_groq:
-        st.error("Veuillez saisir votre clé API Groq.")
-    elif st.session_state.cat_risque is None:
-        st.error("Veuillez d'abord évaluer le profil patient.")
+if st.button("2. GÉNÉRER LA LETTRE FORMELLE"):
+    if not api_key_groq: st.error("Clé API manquante")
     else:
         try:
             client = Groq(api_key=api_key_groq)
-            
-            if "TRES ELEVE" in st.session_state.cat_risque: obj = "< 1.4 mmol/L"
-            elif "ELEVE" in st.session_state.cat_risque: obj = "< 1.8 mmol/L"
-            else: obj = "< 2.6 mmol/L"
-
-            prompt = f"""
-            Rédige un compte-rendu médical formel hospitalier.
-            
-            PATIENT : {nom_patient}, {age} ans. 
-            RISQUE : {st.session_state.cat_risque}, SCORE2 : {st.session_state.score_estime}%.
-            OBJECTIF LDL : {obj}. TABAC : {fumeur}.
-            
-            MÉDECIN RÉFÉRENT : {dr_nom if dr_nom else "Praticien de l'Alliance"}, {dr_spe if dr_spe else ""}, {dr_cab if dr_cab else ""}.
-
-            CONSIGNES :
-            - Ton clinique hospitalier (Objet, Motif, Conclusions, Conduite à tenir).
-            - À la toute fin, ajoute la mention suivante exactement : "Application créée par Jennyfer Vari, Neli Ilieva et Pauline ROBERT".
-            - Ne laisse aucun crochet [].
-            """
-            
-            completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[{"role": "system", "content": "Tu es un assistant médical hospitalier rigoureux."},
-                          {"role": "user", "content": prompt}]
-            )
-            
+            prompt = f"Rédige un compte-rendu hospitalier formel pour {nom_patient} ({age} ans). Risque: {st.session_state.cat_risque}. Inclure sport 150min, alimentation, arrêt tabac. Signé par: {dr_nom if dr_nom else 'Le praticien'}. Mentionner à la fin : Application créée par Jennyfer Vari, Neli Ilieva et Pauline ROBERT."
+            completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
             st.session_state.lettre_generee = completion.choices[0].message.content
-            st.text_area("Aperçu clinique", value=st.session_state.lettre_generee, height=450)
-            
-        except Exception as e:
-            st.error(f"Erreur de génération : {e}")
+            st.text_area("Aperçu", value=st.session_state.lettre_generee, height=300)
+        except Exception as e: st.error(f"Erreur : {e}")
 
-# TÉLÉCHARGEMENT PDF
 if st.session_state.lettre_generee:
     pdf_data = create_pdf(st.session_state.lettre_generee)
-    st.download_button(
-        label="📥 TÉLÉCHARGER LE COMPTE-RENDU (PDF)",
-        data=pdf_data,
-        file_name=f"CR_Cardio_{nom_patient}.pdf",
-        mime="application/pdf"
-    )
+    st.download_button("📥 TÉLÉCHARGER LE PDF", data=pdf_data, file_name=f"CR_{nom_patient}.pdf", mime="application/pdf")
+
+# 10. MENTION DES CRÉATEURS EN BAS DE LA PAGE (INTERFACE)
+st.markdown("<br><br><br>", unsafe_allow_html=True)
+st.divider()
+st.markdown("""
+    <div style='text-align: center; color: #555; padding: 20px;'>
+        <b>Application créée par :</b> Jennyfer Vari, Neli Ilieva et Pauline ROBERT
+    </div>
+    """, unsafe_allow_html=True)
