@@ -13,7 +13,7 @@ if 'score_estime' not in st.session_state:
 if 'lettre_generee' not in st.session_state:
     st.session_state.lettre_generee = ""
 
-# 3. STYLE CSS (Identité visuelle hospitalière)
+# 3. STYLE CSS
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
@@ -27,11 +27,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# FONCTION GÉNÉRATION PDF (Mise en page médicale)
+# FONCTION GÉNÉRATION PDF (Mise en page hospitalière avec mentions finales)
 def create_pdf(text):
     pdf = FPDF()
     pdf.add_page()
-    # En-tête type hôpital
+    
+    # En-tête
     pdf.set_font("Arial", 'B', 14)
     pdf.set_text_color(0, 77, 153)
     pdf.cell(0, 10, "L'ALLIANCE PROTECTRICE - UNITE DE PREVENTION CARDIOVASCULAIRE", ln=True, align='L')
@@ -42,13 +43,19 @@ def create_pdf(text):
     # Corps du texte
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", size=11)
-    # Encodage pour éviter les erreurs de caractères spéciaux
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     
+    # Bas de page - Mentions de création
     pdf.ln(20)
-    pdf.set_font("Arial", 'I', 10)
-    pdf.cell(0, 10, "Document genere numeriquement - Valable apres signature et cachet.", align='R')
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(0, 10, "Conception et Developpement :", ln=True, align='L')
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 5, "Jennyfer Vari, Neli Ilieva et Pauline ROBERT", ln=True, align='L')
+    
+    pdf.ln(10)
+    pdf.set_font("Arial", 'I', 9)
+    pdf.cell(0, 10, "Document genere numeriquement - Valable apres signature et cachet du praticien.", align='R')
     return pdf.output(dest='S').encode('latin-1')
 
 # 4. EN-TÊTE
@@ -57,7 +64,7 @@ st.title("🛡️ L'ALLIANCE PROTECTRICE")
 st.subheader("SERVICE D'ÉVALUATION DU RISQUE CARDIOVASCULAIRE")
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 5. BARRE LATÉRALE (Identité Médecin)
+# 5. BARRE LATÉRALE
 with st.sidebar:
     st.header("👨‍⚕️ Praticien Référent")
     dr_nom = st.text_input("Nom et Prénom", placeholder="ex: Dr Pauline ROBERT")
@@ -87,7 +94,7 @@ with col3:
     insuffisance_renale = st.selectbox("Fonction rénale (DFG)", ["Normal", "30-59 mL/min", "<30 mL/min"])
     atcd_cv = st.checkbox("ATCD cardiovasculaires avérés")
 
-# 7. CALCUL DU RISQUE
+# 7. LOGIQUE DE CALCUL
 def calculer_risque(age_p, score_p, atcd_p, dfg_p, systo_p):
     if atcd_p: return "TRES ELEVE (Prévention secondaire)"
     if systo_p >= 180 or dfg_p == "<30 mL/min": return "TRES ELEVE"
@@ -116,33 +123,28 @@ if st.button("GÉNÉRER LE COMPTE-RENDU FORMEL"):
         try:
             client = Groq(api_key=api_key_groq)
             
-            # Objectif LDL selon guidelines
             if "TRES ELEVE" in st.session_state.cat_risque: obj = "< 1.4 mmol/L"
             elif "ELEVE" in st.session_state.cat_risque: obj = "< 1.8 mmol/L"
             else: obj = "< 2.6 mmol/L"
 
             prompt = f"""
-            Rédige une lettre de recommandation médicale FORMELLE et TYPIQUE d'un service de cardiologie hospitalier.
+            Rédige un compte-rendu médical formel hospitalier.
             
-            STRUCTURE :
-            1. OBJET : Évaluation du risque cardiovasculaire.
-            2. MOTIF : Bilan de prévention.
-            3. DONNÉES : Patient {nom_patient}, {age} ans. Risque {st.session_state.cat_risque}, SCORE2 de {st.session_state.score_estime}%.
-            4. CONCLUSIONS : Expliquer l'objectif LDL-C ({obj}) et la gestion des facteurs (Tabac: {fumeur}).
-            5. CONDUITE À TENIR : Mesures hygiéno-diététiques précises.
+            PATIENT : {nom_patient}, {age} ans. 
+            RISQUE : {st.session_state.cat_risque}, SCORE2 : {st.session_state.score_estime}%.
+            OBJECTIF LDL : {obj}. TABAC : {fumeur}.
             
-            MÉDECIN RÉFÉRENT : {dr_nom if dr_nom else "[NOM DU PRATICIEN]"}, {dr_spe if dr_spe else "[SPÉCIALITÉ]"}, {dr_cab if dr_cab else "[SERVICE]"}.
+            MÉDECIN RÉFÉRENT : {dr_nom if dr_nom else "Praticien de l'Alliance"}, {dr_spe if dr_spe else ""}, {dr_cab if dr_cab else ""}.
 
             CONSIGNES :
-            - Ton très médical, factuel et structuré.
-            - Utilise "Nous avons reçu ce jour..." ou "Le bilan de ce jour montre...".
-            - NE METS AUCUNE ADRESSE POSTALE.
-            - NE LAISSE AUCUN CROCHET []. Si le nom du médecin n'est pas fourni, laisse une ligne pointillée pour signature.
+            - Ton clinique hospitalier (Objet, Motif, Conclusions, Conduite à tenir).
+            - À la toute fin, ajoute la mention suivante exactement : "Application créée par Jennyfer Vari, Neli Ilieva et Pauline ROBERT".
+            - Ne laisse aucun crochet [].
             """
             
             completion = client.chat.completions.create(
                 model="llama-3.1-8b-instant",
-                messages=[{"role": "system", "content": "Tu es un secrétariat médical spécialisé en cardiologie hospitalière."},
+                messages=[{"role": "system", "content": "Tu es un assistant médical hospitalier rigoureux."},
                           {"role": "user", "content": prompt}]
             )
             
