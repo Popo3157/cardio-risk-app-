@@ -27,6 +27,17 @@ st.markdown("""
     input, select, textarea, .stSelectbox, .stNumberInput { color: #333333 !important; background-color: #ffffff !important; }
     .stButton>button { background-color: #004d99 !important; color: white !important; border-radius: 8px; font-weight: bold; height: 3.5em; border: none; }
     [data-testid="stVerticalBlock"] > div { background-color: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    
+    /* Style du bandeau d'en-tête */
+    .header-box {
+        background-color: #ffffff; padding: 25px; border-radius: 15px; 
+        border-top: 5px solid #004d99; margin-bottom: 25px; text-align: center;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.05);
+    }
+    .header-box h1 { color: #004d99; margin-bottom: 5px; }
+    .header-box p { color: #666; font-style: italic; }
+    
+    .footer-text { text-align: center; color: #666; padding: 20px; font-size: 14px; border-top: 1px solid #ddd; margin-top: 50px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -41,12 +52,17 @@ if not st.session_state.authenticated:
         else: st.error("Code incorrect.")
     st.stop()
 
-# 3. LOGO
+# --- 3. EN-TÊTE VISUEL (INTERFACE DU HAUT) ---
+st.markdown('<div class="header-box">', unsafe_allow_html=True)
 if os.path.exists("logo.png"):
-    c_l1, c_l2, c_l3 = st.columns([1, 2, 1])
-    with c_l2: st.image("logo.png", use_container_width=True)
+    # On centre le logo à l'intérieur du bandeau
+    st.image("logo.png", width=250)
+else:
+    st.markdown("<h1>🛡️ L'ALLIANCE PROTECTRICE</h1>", unsafe_allow_html=True)
+st.markdown("<p>DÉTECTION & PRÉVENTION CARDIOVASCULAIRE</p>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# 4. BARRE LATÉRALE (CHAMPS VIDES)
+# 4. BARRE LATÉRALE
 with st.sidebar:
     st.header("👨‍⚕️ Praticien")
     dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
@@ -90,7 +106,7 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DU COURRIER AVEC RAPPEL DES DONNÉES
+# 8. GÉNÉRATION DU COURRIER
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
         if not GROQ_API_KEY: st.error("Clé API manquante dans les Secrets.")
@@ -98,7 +114,7 @@ with col_btn2:
         else:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
-                prompt = f"""Rédige une lettre de consultation médicale de la part de {dr_nom}. 
+                prompt = f"""Rédige une lettre de consultation médicale professionnelle de la part de {dr_nom}. 
                 INTERDIT : Pas d'astérisques (*).
                 
                 STRUCTURE :
@@ -111,7 +127,7 @@ with col_btn2:
                    - Fonction rénale (DFG) : {dfg_p}
                 3. Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
                 4. Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
-                5. Fin de lettre : Signe obligatoirement par 'Cordialement, {dr_nom}'.
+                5. Fin : Signe obligatoirement par 'Cordialement, {dr_nom}'.
                 6. Mention : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
                 
                 completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
@@ -139,7 +155,7 @@ def create_pdf(text, dr, spe, cab, patient, age):
     pdf.set_x(120)
     pdf.cell(0, 6, f"Age : {age} ans", ln=True)
     pdf.set_x(120)
-    pdf.cell(0, 6, "Fait le : 06/05/2026", ln=True)
+    pdf.cell(0, 6, "Fait le : 13/05/2026", ln=True)
     pdf.ln(15)
     pdf.set_font("Arial", '', 11)
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
@@ -152,3 +168,5 @@ def create_pdf(text, dr, spe, cab, patient, age):
 if st.session_state.lettre_generee:
     pdf_data = create_pdf(st.session_state.lettre_generee, dr_nom, dr_spe, dr_cab, nom_p, age_p)
     st.download_button("📥 TÉLÉCHARGER LE PDF COMPLET", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
+
+st.markdown('<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026</div>', unsafe_allow_html=True)
