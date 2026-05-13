@@ -115,7 +115,7 @@ with col_btn2:
                 client = Groq(api_key=GROQ_API_KEY)
                 
                 # Prompt ultra-précis pour éviter les oublis
-                prompt = f"""Tu es un assistant médical de haut niveau. 
+                prompt = Tu es un assistant médical de haut niveau. 
                 Rédige une lettre de consultation formelle pour le Docteur {dr_nom}.
                 Destinataire : {nom_p}.
                 
@@ -126,4 +126,68 @@ with col_btn2:
                 CONTENU OBLIGATOIRE À INCLURE :
                 1. SALUTATION : 'Cher(e) {nom_p},'
                 2. OBJET : Stratification du risque cardiovasculaire selon le modèle SCORE2.
-                3. RAPPEL DES CONST
+                3. RAPPEL DES CONSTANTES (Vérifie bien ces chiffres) : 
+                   - Tension artérielle : {systo_p} mmHg
+                   - Cholestérol non-HDL : {chol_p} mmol/L
+                   - Tabagisme : {fumeur_p}
+                   - Statut Diabétique : {diabete_p}
+                   - Fonction rénale (DFG) : {dfg_p}
+                4. BILAN DU RISQUE : Explique que le risque est '{st.session_state.cat_risque}' avec un score estimé à {st.session_state.score_estime}%.
+                5. PRÉCONISATIONS : Objectifs de LDL-cholestérol, activité physique régulière (150 min/semaine), mesures diététiques.
+                6. CONCLUSION ET SIGNATURE : 'Cordialement, {dr_nom}'.
+                7. CRÉDITS : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
+                
+                completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
+                
+                # Nettoyage automatique des caractères spéciaux résiduels
+                texte_propre = completion.choices[0].message.content.replace('*', '').replace('#', '')
+                st.session_state.lettre_generee = texte_propre
+                
+            except Exception as e: st.error(f"Erreur : {e}")
+
+if st.session_state.lettre_generee:
+    st.info(st.session_state.lettre_generee)
+
+# 9. PDF PROFESSIONNEL (MISE EN PAGE TYPE COURRIER)
+def create_pdf(text, dr, spe, cab, patient, age):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # En-tête Praticien
+    pdf.set_font("Arial", 'B', 12)
+    pdf.set_text_color(0, 77, 153)
+    pdf.cell(0, 6, dr.upper(), ln=True)
+    pdf.set_font("Arial", '', 10)
+    pdf.cell(0, 5, spe if spe else "", ln=True)
+    pdf.cell(0, 5, cab if cab else "", ln=True)
+    pdf.ln(10)
+    
+    # Bloc Patient décalé à droite
+    pdf.set_font("Arial", 'B', 10)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_x(120)
+    pdf.cell(0, 6, f"A l'attention de : {patient}", ln=True)
+    pdf.set_x(120)
+    pdf.cell(0, 6, f"Âge : {age} ans", ln=True)
+    pdf.set_x(120)
+    pdf.cell(0, 6, "Fait le : 13/05/2026", ln=True)
+    pdf.ln(15)
+    
+    # Corps du courrier
+    pdf.set_font("Arial", '', 11)
+    # Remplacement des caractères non-compatibles avec Latin-1
+    clean_text = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 7, txt=clean_text)
+    
+    # Signature en bas à droite
+    pdf.ln(20)
+    pdf.set_font("Arial", 'I', 10)
+    pdf.cell(0, 10, f"Signature et cachet du {dr} :", ln=True, align='R')
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+if st.session_state.lettre_generee:
+    pdf_data = create_pdf(st.session_state.lettre_generee, dr_nom, dr_spe, dr_cab, nom_p, age_p)
+    st.download_button("📥 TÉLÉCHARGER LE PDF PROFESSIONNEL", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
+
+st.markdown('<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026</div>', unsafe_allow_html=True)
