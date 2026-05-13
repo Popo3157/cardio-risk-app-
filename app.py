@@ -20,7 +20,7 @@ if 'score_estime' not in st.session_state: st.session_state.score_estime = 0.0
 if 'lettre_generee' not in st.session_state: st.session_state.lettre_generee = ""
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
-# 2. STYLE CSS
+# 2. STYLE CSS (Optimisé pour Apple et Lisibilité)
 st.markdown("""
     <style>
     html, body, [data-testid="stAppViewContainer"] { background-color: #f4f7f9 !important; color: #333333 !important; }
@@ -62,7 +62,7 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 # 4. BARRE LATÉRALE
 with st.sidebar:
-    st.header("👨‍⚕️ Praticien")
+    st.header("👨‍⚕️ Praticien Référent")
     dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
     dr_spe = st.text_input("Spécialité", placeholder="ex: Cardiologie")
     dr_cab = st.text_input("Cabinet / Hôpital", placeholder="ex: Unité de Prévention")
@@ -72,22 +72,23 @@ with st.sidebar:
         st.rerun()
 
 # 5. FORMULAIRE PATIENT
-st.subheader("📋 Informations du Patient")
+st.subheader("📋 Paramètres Cliniques du Patient")
 with st.container():
     c1, c2, c3 = st.columns(3)
     with c1:
-        nom_p = st.text_input("Nom du Patient")
+        nom_p = st.text_input("Identité du Patient", placeholder="Nom et Prénom")
         age_p = st.number_input("Âge", min_value=18, max_value=100, value=55)
         sexe_p = st.radio("Sexe", ["Homme", "Femme"], horizontal=True)
     with c2:
-        fumeur_p = st.radio("Tabagisme", ["Non", "Oui"], horizontal=True)
+        fumeur_p = st.radio("Tabagisme actif", ["Non", "Oui"], horizontal=True)
         systo_p = st.number_input("PAS (mmHg)", value=130)
         chol_p = st.number_input("Cholestérol non-HDL (mmol/L)", value=3.9, step=0.1)
     with c3:
-        diabete_p = "Oui" if st.checkbox("Diabète") else "Non"
-        dfg_p = st.selectbox("Fonction rénale", ["Normal", "30-59 (Modéré)", "<30 (Sévère)"])
-        atcd_p = st.checkbox("Antécédents (AVC, IDM)")
+        diabete_p = "Oui" if st.checkbox("Diabète sucré") else "Non"
+        dfg_p = st.selectbox("Fonction rénale (DFG)", ["Normal", "30-59 mL/min (Modéré)", "<30 mL/min (Sévère)"])
+        atcd_p = st.checkbox("Antécédents cardiovasculaires (AVC, IDM)")
 
+# 6. LOGIQUE MÉDICALE
 def calculer_score(atcd, dfg, systo):
     if atcd: return "TRÈS ÉLEVÉ (Prévention Secondaire)", 15.0
     if systo >= 180 or "<30" in dfg: return "TRÈS ÉLEVÉ", 12.0
@@ -104,7 +105,7 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DU COURRIER (CORRECTION NOM PATIENT)
+# 8. GÉNÉRATION DU COURRIER (PROMPT HAUTE PRÉCISION)
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
         if not GROQ_API_KEY: st.error("Clé API manquante.")
@@ -112,61 +113,17 @@ with col_btn2:
         else:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
-                # Ajout de l'instruction "Commence la lettre par Cher(e) [nom_p]"
-                prompt = f"""Rédige une lettre de consultation médicale de la part de {dr_nom} destinée au patient {nom_p}. 
-                INTERDIT : Pas d'astérisques (*).
                 
-                STRUCTURE :
-                1. Salutation : Commence impérativement par 'Cher(e) {nom_p},'.
-                2. Objet : Stratification du risque cardiovasculaire (SCORE2).
-                3. Rappel des données cliniques de {nom_p} : 
-                   - Pression Artérielle Systolique : {systo_p} mmHg
-                   - Cholestérol non-HDL : {chol_p} mmol/L
-                   - Tabagisme : {fumeur_p}
-                   - Diabète : {diabete_p}
-                   - Fonction rénale (DFG) : {dfg_p}
-                4. Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
-                5. Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
-                6. Fin : Signe par 'Cordialement, {dr_nom}'.
-                7. Mention : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
+                # Prompt ultra-précis pour éviter les oublis
+                prompt = f"""Tu es un assistant médical de haut niveau. 
+                Rédige une lettre de consultation formelle pour le Docteur {dr_nom}.
+                Destinataire : {nom_p}.
                 
-                completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
-                st.session_state.lettre_generee = completion.choices[0].message.content.replace('*', '')
-            except Exception as e: st.error(f"Erreur : {e}")
-
-if st.session_state.lettre_generee:
-    st.info(st.session_state.lettre_generee)
-
-# 9. PDF PROFESSIONNEL
-def create_pdf(text, dr, spe, cab, patient, age):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 12)
-    pdf.set_text_color(0, 77, 153)
-    pdf.cell(0, 6, dr.upper(), ln=True)
-    pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 5, spe if spe else "", ln=True)
-    pdf.cell(0, 5, cab if cab else "", ln=True)
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_x(120)
-    pdf.cell(0, 6, f"Patient : {patient}", ln=True)
-    pdf.set_x(120)
-    pdf.cell(0, 6, f"Age : {age} ans", ln=True)
-    pdf.set_x(120)
-    pdf.cell(0, 6, "Fait le : 13/05/2026", ln=True)
-    pdf.ln(15)
-    pdf.set_font("Arial", '', 11)
-    clean_text = text.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 7, txt=clean_text)
-    pdf.ln(20)
-    pdf.set_font("Arial", 'I', 10)
-    pdf.cell(0, 10, f"Signature et cachet du {dr} :", ln=True, align='R')
-    return pdf.output(dest='S').encode('latin-1')
-
-if st.session_state.lettre_generee:
-    pdf_data = create_pdf(st.session_state.lettre_generee, dr_nom, dr_spe, dr_cab, nom_p, age_p)
-    st.download_button("📥 TÉLÉCHARGER LE PDF COMPLET", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
-
-st.markdown('<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026</div>', unsafe_allow_html=True)
+                CONSIGNES STRICTES :
+                - Ne mets JAMAIS d'astérisques (*), de hashtags (#) ou de gras.
+                - Utilise un ton professionnel, clinique et bienveillant.
+                
+                CONTENU OBLIGATOIRE À INCLURE :
+                1. SALUTATION : 'Cher(e) {nom_p},'
+                2. OBJET : Stratification du risque cardiovasculaire selon le modèle SCORE2.
+                3. RAPPEL DES CONST
