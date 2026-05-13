@@ -3,14 +3,15 @@ from groq import Groq
 from fpdf import FPDF
 import os
 
-# --- SÉCURITÉ ET ACCÈS --- protection de la clé pour qu'elle reste cachée au public
+# --- SÉCURITÉ ET ACCÈS ---
+# On récupère la clé API de manière invisible via les secrets de Streamlit
+# Cela évite que Groq ne désactive la clé pour "exposition publique"
 try:
     GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 except:
-    # Message d'erreur si la clé n'est pas encore configurée dans les paramètres Streamlit
     GROQ_API_KEY = None
 
-# Mot de passe pour déverrouiller l'interface (à changer selon vos besoins)
+# Mot de passe pour déverrouiller l'interface
 SECRET_PASSWORD_MEDECIN = "Alliance2026"
 
 # 1. CONFIGURATION DE LA PAGE
@@ -30,14 +31,49 @@ if 'lettre_generee' not in st.session_state:
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-# 2. STYLE CSS (Optimisé pour Apple et visibilité)
+# 2. STYLE CSS (Optimisé pour Apple Safari et visibilité des textes)
 st.markdown("""
     <style>
-    html, body, [data-testid="stAppViewContainer"] { background-color: #f4f7f9 !important; color: #333333 !important; }
-    input, select, textarea, .stSelectbox, .stNumberInput { color: #333333 !important; background-color: #ffffff !important; }
-    .stButton>button { background-color: #004d99 !important; color: white !important; border-radius: 8px; width: 100%; font-weight: bold; height: 3.5em; border: none; }
-    [data-testid="stVerticalBlock"] > div { background-color: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); color: #333333 !important; }
-    .footer-text { text-align: center; color: #666; padding: 20px; font-size: 14px; border-top: 1px solid #ddd; margin-top: 50px; }
+    /* Correction Safari/iOS : Forcer les couleurs de texte et fond */
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #f4f7f9 !important;
+        color: #333333 !important;
+    }
+    
+    /* Forcer la visibilité des textes dans les champs de saisie */
+    input, select, textarea, .stSelectbox, .stNumberInput {
+        color: #333333 !important;
+        background-color: #ffffff !important;
+    }
+
+    /* Style des boutons Alliance */
+    .stButton>button {
+        background-color: #004d99 !important;
+        color: white !important;
+        border-radius: 8px;
+        width: 100%;
+        font-weight: bold;
+        height: 3.5em;
+        border: none;
+    }
+    
+    /* Cartes blanches pour les blocs de contenu */
+    [data-testid="stVerticalBlock"] > div {
+        background-color: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        color: #333333 !important;
+    }
+    
+    .footer-text {
+        text-align: center;
+        color: #666;
+        padding: 20px;
+        font-size: 14px;
+        border-top: 1px solid #ddd;
+        margin-top: 50px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -50,13 +86,16 @@ if not st.session_state.authenticated:
             st.session_state.authenticated = True
             st.rerun()
         else:
-            st.error("Code incorrect.")
+            st.error("Code incorrect. Veuillez contacter l'administration.")
     st.stop()
 
-# --- CHARGEMENT DU LOGO ---
+# --- SI AUTHENTIFIÉ, LE RESTE DU PROGRAMME S'EXÉCUTE ---
+
+# 3. CHARGEMENT DU LOGO
 if os.path.exists("logo.png"):
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
-    with col_l2: st.image("logo.png", use_container_width=True)
+    with col_l2:
+        st.image("logo.png", use_container_width=True)
 else:
     st.markdown('<div style="text-align:center;"><h1>🛡️ L\'ALLIANCE PROTECTRICE</h1></div>', unsafe_allow_html=True)
 
@@ -64,7 +103,7 @@ else:
 with st.sidebar:
     st.header("👨‍⚕️ Praticien Référent")
     dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
-    dr_spe = st.text_input("Spécialité")
+    dr_spe = st.text_input("Spécialité", placeholder="ex: Cardiologie")
     dr_cab = st.text_input("Nom du Cabinet / Hôpital")
     st.divider()
     if st.button("Se déconnecter"):
@@ -76,7 +115,7 @@ st.subheader("📋 Informations du Patient")
 with st.container():
     c1, c2, c3 = st.columns(3)
     with c1:
-        nom_p = st.text_input("Identité du Patient")
+        nom_p = st.text_input("Identité du Patient", placeholder="Nom et Prénom")
         age_p = st.number_input("Âge", min_value=18, max_value=100, value=55)
         sexe_p = st.radio("Sexe", ["Homme", "Femme"], horizontal=True)
     with c2:
@@ -86,9 +125,9 @@ with st.container():
     with c3:
         diabete_p = st.checkbox("Diabète sucré")
         dfg_p = st.selectbox("Fonction rénale (DFG)", ["Normal", "30-59 mL/min (Modéré)", "<30 mL/min (Sévère)"])
-        atcd_p = st.checkbox("ATCD cardiovasculaires")
+        atcd_p = st.checkbox("ATCD cardiovasculaires (AVC, IDM)")
 
-# 6. CALCUL
+# 6. LOGIQUE DE CALCUL
 def calculer_score(atcd, dfg, systo):
     if atcd: return "TRÈS ÉLEVÉ (Secondaire)", 15.0
     if systo >= 180 or "<30" in dfg: return "TRÈS ÉLEVÉ", 12.0
@@ -97,6 +136,7 @@ def calculer_score(atcd, dfg, systo):
 
 # 7. ACTIONS
 col_btn1, col_btn2 = st.columns(2)
+
 with col_btn1:
     if st.button("📊 1. ÉVALUER LE PROFIL"):
         cat, val = calculer_score(atcd_p, dfg_p, systo_p)
@@ -105,7 +145,7 @@ with col_btn1:
         st.toast("Calcul effectué !")
 
 if st.session_state.cat_risque:
-    st.success(f"**Analyse :** Risque **{st.session_state.cat_risque}** (Score : {st.session_state.score_estime}%)")
+    st.success(f"**Analyse :** Risque **{st.session_state.cat_risque}** (Score estimé : {st.session_state.score_estime}%)")
 
 # 8. GÉNÉRATION DE LA LETTRE IA (SYNTHÉTIQUE)
 with col_btn2:
@@ -117,13 +157,19 @@ with col_btn2:
         else:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
-                prompt = Rédige un compte-rendu médical hospitalier TRÈS SYNTHÉTIQUE. Pas de gras ni d'étoiles.
-                MÉDECIN : {dr_nom}, {dr_spe} ({dr_cab}). PATIENT : {nom_p}, {age_p} ans.
-                Données : Risque {st.session_state.cat_risque}, Score {st.session_state.score_estime}%. Tabac : {fumeur_p}.
-                Recommandations : Cible LDL-C, Sport (150min/sem), Régime.
-                Application créée par Jennyfer Vari, Neli Ilieva et Pauline Robert."""
+                prompt = f"""Rédige un compte-rendu médical hospitalier TRÈS SYNTHÉTIQUE. Pas de gras ni d'étoiles Markdown.
+                MÉDECIN : {dr_nom}, {dr_spe} ({dr_cab}).
+                PATIENT : {nom_p}, {age_p} ans.
+                DONNÉES : Risque {st.session_state.cat_risque} (SCORE2 : {st.session_state.score_estime}%). Tabac : {fumeur_p}. PAS : {systo_p} mmHg.
+                CONTENU : 
+                1. Objet : Stratification du risque CV. 
+                2. Recommandations : Cible LDL-C, Activité physique (150min/sem), Mesures diététiques.
+                Mention de fin : Application créée par Jennyfer Vari, Neli Ilieva et Pauline Robert."""
                 
-                completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant", 
+                    messages=[{"role": "user", "content": prompt}]
+                )
                 st.session_state.lettre_generee = completion.choices[0].message.content
             except Exception as e:
                 st.error(f"Erreur IA : {e}")
@@ -131,20 +177,37 @@ with col_btn2:
 if st.session_state.lettre_generee:
     st.info(st.session_state.lettre_generee)
 
-# 9. PDF
+# 9. GÉNÉRATION PDF
 def create_pdf(text, dr):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16); pdf.set_text_color(0, 77, 153)
-    pdf.cell(0, 10, "L'ALLIANCE PROTECTRICE", ln=True, align='C'); pdf.ln(10)
-    pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", size=11)
+    pdf.set_font("Arial", 'B', 16)
+    pdf.set_text_color(0, 77, 153)
+    pdf.cell(0, 10, "L'ALLIANCE PROTECTRICE", ln=True, align='C')
+    pdf.ln(10)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", size=11)
+    # Correction encodage pour les accents
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
-    pdf.multi_cell(0, 7, txt=clean_text); pdf.ln(10)
-    pdf.cell(0, 10, f"Cachet et signature de {dr} :", ln=True)
+    pdf.multi_cell(0, 7, txt=clean_text)
+    
+    pdf.ln(10)
+    pdf.cell(0, 10, f"Fait le 06/05/2026. Cachet et signature de {dr} :", ln=True)
     return pdf.output(dest='S').encode('latin-1')
 
 if st.session_state.lettre_generee:
     pdf_data = create_pdf(st.session_state.lettre_generee, dr_nom)
-    st.download_button("📥 TÉLÉCHARGER LE PDF", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
+    st.download_button(
+        "📥 TÉLÉCHARGER LE COMPTE-RENDU (PDF)", 
+        data=pdf_data, 
+        file_name=f"CR_Alliance_{nom_p}.pdf", 
+        mime="application/pdf"
+    )
 
-st.markdown('<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026</div>', unsafe_allow_html=True)
+# 10. FOOTER
+st.markdown("""
+    <div class="footer-text">
+        Projet L'Alliance Protectrice | Développé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026
+    </div>
+    """, unsafe_allow_html=True)
