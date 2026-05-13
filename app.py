@@ -28,7 +28,6 @@ st.markdown("""
     .stButton>button { background-color: #004d99 !important; color: white !important; border-radius: 8px; font-weight: bold; height: 3.5em; border: none; }
     [data-testid="stVerticalBlock"] > div { background-color: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
     
-    /* Style du bandeau d'en-tête */
     .header-box {
         background-color: #ffffff; padding: 25px; border-radius: 15px; 
         border-top: 5px solid #004d99; margin-bottom: 25px; text-align: center;
@@ -52,10 +51,9 @@ if not st.session_state.authenticated:
         else: st.error("Code incorrect.")
     st.stop()
 
-# --- 3. EN-TÊTE VISUEL (INTERFACE DU HAUT) ---
+# --- 3. EN-TÊTE VISUEL ---
 st.markdown('<div class="header-box">', unsafe_allow_html=True)
 if os.path.exists("logo.png"):
-    # On centre le logo à l'intérieur du bandeau
     st.image("logo.png", width=250)
 else:
     st.markdown("<h1>🛡️ L'ALLIANCE PROTECTRICE</h1>", unsafe_allow_html=True)
@@ -106,29 +104,31 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DU COURRIER
+# 8. GÉNÉRATION DU COURRIER (CORRECTION NOM PATIENT)
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
-        if not GROQ_API_KEY: st.error("Clé API manquante dans les Secrets.")
-        elif not nom_p or not dr_nom: st.warning("Veuillez remplir le nom du praticien et du patient.")
+        if not GROQ_API_KEY: st.error("Clé API manquante.")
+        elif not nom_p or not dr_nom: st.warning("Veuillez remplir les noms du praticien et du patient.")
         else:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
-                prompt = f"""Rédige une lettre de consultation médicale professionnelle de la part de {dr_nom}. 
+                # Ajout de l'instruction "Commence la lettre par Cher(e) [nom_p]"
+                prompt = f"""Rédige une lettre de consultation médicale de la part de {dr_nom} destinée au patient {nom_p}. 
                 INTERDIT : Pas d'astérisques (*).
                 
                 STRUCTURE :
-                1. Objet : Stratification du risque cardiovasculaire (SCORE2).
-                2. Rappel des données cliniques du patient : 
+                1. Salutation : Commence impérativement par 'Cher(e) {nom_p},'.
+                2. Objet : Stratification du risque cardiovasculaire (SCORE2).
+                3. Rappel des données cliniques de {nom_p} : 
                    - Pression Artérielle Systolique : {systo_p} mmHg
                    - Cholestérol non-HDL : {chol_p} mmol/L
                    - Tabagisme : {fumeur_p}
                    - Diabète : {diabete_p}
                    - Fonction rénale (DFG) : {dfg_p}
-                3. Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
-                4. Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
-                5. Fin : Signe obligatoirement par 'Cordialement, {dr_nom}'.
-                6. Mention : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
+                4. Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
+                5. Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
+                6. Fin : Signe par 'Cordialement, {dr_nom}'.
+                7. Mention : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
                 
                 completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
                 st.session_state.lettre_generee = completion.choices[0].message.content.replace('*', '')
