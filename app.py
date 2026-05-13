@@ -46,12 +46,13 @@ if os.path.exists("logo.png"):
     c_l1, c_l2, c_l3 = st.columns([1, 2, 1])
     with c_l2: st.image("logo.png", use_container_width=True)
 
-# 4. BARRE LATÉRALE
+# 4. BARRE LATÉRALE (CHAMPS VIDES PAR DÉFAUT)
 with st.sidebar:
     st.header("👨‍⚕️ Praticien")
-    dr_nom = st.text_input("Nom du Docteur", value="Dr Pauline ROBERT")
-    dr_spe = st.text_input("Spécialité", value="Cardiologie")
-    dr_cab = st.text_input("Cabinet / Hôpital", value="Unité de Prévention Cardiovasculaire")
+    dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
+    dr_spe = st.text_input("Spécialité", placeholder="ex: Cardiologie")
+    dr_cab = st.text_input("Cabinet / Hôpital", placeholder="ex: Hôpital Saint-Antoine")
+    st.divider()
     if st.button("Se déconnecter"):
         st.session_state.authenticated = False
         st.rerun()
@@ -89,63 +90,61 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DE LA LETTRE (CORRIGÉE)
+# 8. GÉNÉRATION DU COURRIER
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
         if not GROQ_API_KEY: st.error("Clé API manquante dans les Secrets.")
-        elif not nom_p: st.warning("Nom du patient requis.")
+        elif not nom_p or not dr_nom: st.warning("Veuillez remplir le nom du praticien et du patient.")
         else:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
-                prompt = f"""Rédige une lettre de consultation médicale. 
-                STRICTEMENT INTERDIT : Ne mets JAMAIS d'astérisques (*) ou de symboles Markdown.
-                STYLE : Professionnel, médical, direct.
+                prompt = f"""Rédige une lettre de consultation médicale de la part de {dr_nom}. 
+                INTERDIT : Pas d'astérisques (*).
                 CONTENU :
                 - Objet : Stratification du risque cardiovasculaire (SCORE2).
-                - Conclusion : Risque {st.session_state.cat_risque} à {st.session_state.score_estime}%.
+                - Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
                 - Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
-                - Fin : Mentionner 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
+                - Fin de lettre : Signe obligatoirement par 'Cordialement, {dr_nom}'.
+                - Mention finale : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
                 
                 completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
-                # On nettoie les résidus d'astérisques au cas où
                 st.session_state.lettre_generee = completion.choices[0].message.content.replace('*', '')
             except Exception as e: st.error(f"Erreur : {e}")
 
 if st.session_state.lettre_generee:
     st.info(st.session_state.lettre_generee)
 
-# 9. PDF STYLE "CABINET MÉDICAL"
+# 9. PDF PROFESSIONNEL
 def create_pdf(text, dr, spe, cab, patient, age):
     pdf = FPDF()
     pdf.add_page()
     
-    # EN-TÊTE CABINET (À GAUCHE)
+    # EN-TÊTE MÉDECIN
     pdf.set_font("Arial", 'B', 12)
     pdf.set_text_color(0, 77, 153)
     pdf.cell(0, 6, dr.upper(), ln=True)
     pdf.set_font("Arial", '', 10)
-    pdf.cell(0, 6, spe, ln=True)
-    pdf.cell(0, 6, cab, ln=True)
+    pdf.cell(0, 5, spe if spe else "", ln=True)
+    pdf.cell(0, 5, cab if cab else "", ln=True)
     pdf.ln(10)
     
-    # INFOS PATIENT (À DROITE)
-    pdf.set_x(120)
-    pdf.set_font("Arial", 'B', 11)
+    # BLOC PATIENT / DATE
+    pdf.set_font("Arial", 'B', 10)
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 8, f"Patient : {patient}", ln=True)
     pdf.set_x(120)
-    pdf.cell(0, 8, f"Âge : {age} ans", ln=True)
+    pdf.cell(0, 6, f"Patient : {patient}", ln=True)
     pdf.set_x(120)
-    pdf.cell(0, 8, "Date : 06/05/2026", ln=True)
+    pdf.cell(0, 6, f"Age : {age} ans", ln=True)
+    pdf.set_x(120)
+    pdf.cell(0, 6, "Fait le : 06/05/2026", ln=True)
     pdf.ln(15)
     
-    # CORPS DE LA LETTRE
+    # CORPS
     pdf.set_font("Arial", '', 11)
-    # Nettoyage final des caractères non-compatibles
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     
-    # SIGNATURE
+    # ESPACE SIGNATURE
     pdf.ln(20)
     pdf.set_font("Arial", 'I', 10)
     pdf.cell(0, 10, f"Signature et cachet du {dr} :", ln=True, align='R')
