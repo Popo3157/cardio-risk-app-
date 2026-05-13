@@ -46,12 +46,12 @@ if os.path.exists("logo.png"):
     c_l1, c_l2, c_l3 = st.columns([1, 2, 1])
     with c_l2: st.image("logo.png", use_container_width=True)
 
-# 4. BARRE LATÉRALE (CHAMPS VIDES PAR DÉFAUT)
+# 4. BARRE LATÉRALE (CHAMPS VIDES)
 with st.sidebar:
     st.header("👨‍⚕️ Praticien")
     dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
     dr_spe = st.text_input("Spécialité", placeholder="ex: Cardiologie")
-    dr_cab = st.text_input("Cabinet / Hôpital", placeholder="ex: Hôpital Saint-Antoine")
+    dr_cab = st.text_input("Cabinet / Hôpital", placeholder="ex: Unité de Prévention")
     st.divider()
     if st.button("Se déconnecter"):
         st.session_state.authenticated = False
@@ -70,7 +70,7 @@ with st.container():
         systo_p = st.number_input("PAS (mmHg)", value=130)
         chol_p = st.number_input("Cholestérol non-HDL (mmol/L)", value=3.9, step=0.1)
     with c3:
-        diabete_p = st.checkbox("Diabète")
+        diabete_p = "Oui" if st.checkbox("Diabète") else "Non"
         dfg_p = st.selectbox("Fonction rénale", ["Normal", "30-59 (Modéré)", "<30 (Sévère)"])
         atcd_p = st.checkbox("Antécédents (AVC, IDM)")
 
@@ -90,7 +90,7 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DU COURRIER
+# 8. GÉNÉRATION DU COURRIER AVEC RAPPEL DES DONNÉES
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
         if not GROQ_API_KEY: st.error("Clé API manquante dans les Secrets.")
@@ -100,12 +100,19 @@ with col_btn2:
                 client = Groq(api_key=GROQ_API_KEY)
                 prompt = f"""Rédige une lettre de consultation médicale de la part de {dr_nom}. 
                 INTERDIT : Pas d'astérisques (*).
-                CONTENU :
-                - Objet : Stratification du risque cardiovasculaire (SCORE2).
-                - Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
-                - Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
-                - Fin de lettre : Signe obligatoirement par 'Cordialement, {dr_nom}'.
-                - Mention finale : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
+                
+                STRUCTURE :
+                1. Objet : Stratification du risque cardiovasculaire (SCORE2).
+                2. Rappel des données cliniques du patient : 
+                   - Pression Artérielle Systolique : {systo_p} mmHg
+                   - Cholestérol non-HDL : {chol_p} mmol/L
+                   - Tabagisme : {fumeur_p}
+                   - Diabète : {diabete_p}
+                   - Fonction rénale (DFG) : {dfg_p}
+                3. Conclusion : Risque {st.session_state.cat_risque} ({st.session_state.score_estime}%).
+                4. Recommandations : Cible LDL-C, Sport (150min/sem), Diététique.
+                5. Fin de lettre : Signe obligatoirement par 'Cordialement, {dr_nom}'.
+                6. Mention : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
                 
                 completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
                 st.session_state.lettre_generee = completion.choices[0].message.content.replace('*', '')
@@ -118,8 +125,6 @@ if st.session_state.lettre_generee:
 def create_pdf(text, dr, spe, cab, patient, age):
     pdf = FPDF()
     pdf.add_page()
-    
-    # EN-TÊTE MÉDECIN
     pdf.set_font("Arial", 'B', 12)
     pdf.set_text_color(0, 77, 153)
     pdf.cell(0, 6, dr.upper(), ln=True)
@@ -127,8 +132,6 @@ def create_pdf(text, dr, spe, cab, patient, age):
     pdf.cell(0, 5, spe if spe else "", ln=True)
     pdf.cell(0, 5, cab if cab else "", ln=True)
     pdf.ln(10)
-    
-    # BLOC PATIENT / DATE
     pdf.set_font("Arial", 'B', 10)
     pdf.set_text_color(0, 0, 0)
     pdf.set_x(120)
@@ -138,19 +141,14 @@ def create_pdf(text, dr, spe, cab, patient, age):
     pdf.set_x(120)
     pdf.cell(0, 6, "Fait le : 06/05/2026", ln=True)
     pdf.ln(15)
-    
-    # CORPS
     pdf.set_font("Arial", '', 11)
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
-    
-    # ESPACE SIGNATURE
     pdf.ln(20)
     pdf.set_font("Arial", 'I', 10)
     pdf.cell(0, 10, f"Signature et cachet du {dr} :", ln=True, align='R')
-    
     return pdf.output(dest='S').encode('latin-1')
 
 if st.session_state.lettre_generee:
     pdf_data = create_pdf(st.session_state.lettre_generee, dr_nom, dr_spe, dr_cab, nom_p, age_p)
-    st.download_button("📥 TÉLÉCHARGER LE PDF PROFESSIONNEL", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
+    st.download_button("📥 TÉLÉCHARGER LE PDF COMPLET", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
