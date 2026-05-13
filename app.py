@@ -2,6 +2,7 @@ import streamlit as st
 from groq import Groq
 from fpdf import FPDF
 import os
+from datetime import date # Import pour la date automatique
 
 # --- SÉCURITÉ ET ACCÈS ---
 try:
@@ -51,7 +52,7 @@ if not st.session_state.authenticated:
         else: st.error("Code incorrect.")
     st.stop()
 
-# --- 3. EN-TÊTE VISUEL (INTERFACE DU HAUT) ---
+# --- 3. EN-TÊTE VISUEL ---
 st.markdown('<div class="header-box">', unsafe_allow_html=True)
 if os.path.exists("logo.png"):
     st.image("logo.png", width=250)
@@ -60,7 +61,7 @@ else:
 st.markdown("<p>DÉTECTION & PRÉVENTION CARDIOVASCULAIRE</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 4. BARRE LATÉRALE (CHAMPS VIDES)
+# 4. BARRE LATÉRALE
 with st.sidebar:
     st.header("👨‍⚕️ Praticien Référent")
     dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
@@ -105,7 +106,7 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DU COURRIER (PROMPT SÉCURISÉ)
+# 8. GÉNÉRATION DU COURRIER
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
         if not GROQ_API_KEY:
@@ -116,7 +117,6 @@ with col_btn2:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
                 
-                # Utilisation des triples guillemets pour éviter les erreurs de syntaxe Python
                 prompt = f"""Tu es un assistant médical. Rédige une lettre de consultation formelle pour le Docteur {dr_nom}.
                 Destinataire : {nom_p}.
                 
@@ -143,7 +143,6 @@ with col_btn2:
                     messages=[{"role": "user", "content": prompt}]
                 )
                 
-                # Nettoyage final des symboles
                 st.session_state.lettre_generee = completion.choices[0].message.content.replace('*', '').replace('#', '')
                 
             except Exception as e:
@@ -152,7 +151,7 @@ with col_btn2:
 if st.session_state.lettre_generee:
     st.info(st.session_state.lettre_generee)
 
-# 9. PDF PROFESSIONNEL
+# 9. PDF PROFESSIONNEL (AVEC DATE AUTOMATIQUE)
 def create_pdf(text, dr, spe, cab, patient, age):
     pdf = FPDF()
     pdf.add_page()
@@ -166,7 +165,8 @@ def create_pdf(text, dr, spe, cab, patient, age):
     pdf.cell(0, 5, cab if cab else "", ln=True)
     pdf.ln(10)
     
-    # Bloc Patient à droite
+    # Bloc Patient à droite avec DATE AUTOMATIQUE
+    date_du_jour = date.today().strftime("%d/%m/%Y")
     pdf.set_font("Arial", 'B', 10)
     pdf.set_text_color(0, 0, 0)
     pdf.set_x(120)
@@ -174,7 +174,7 @@ def create_pdf(text, dr, spe, cab, patient, age):
     pdf.set_x(120)
     pdf.cell(0, 6, f"Age : {age} ans", ln=True)
     pdf.set_x(120)
-    pdf.cell(0, 6, "Fait le : 13/05/2026", ln=True)
+    pdf.cell(0, 6, f"Fait le : {date_du_jour}", ln=True)
     pdf.ln(15)
     
     # Corps
@@ -194,4 +194,4 @@ if st.session_state.lettre_generee:
     st.download_button("📥 TÉLÉCHARGER LE PDF COMPLET", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
 
 # 10. FOOTER
-st.markdown('<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © {date.today().year}</div>', unsafe_allow_html=True)
