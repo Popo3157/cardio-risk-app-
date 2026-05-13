@@ -20,7 +20,7 @@ if 'score_estime' not in st.session_state: st.session_state.score_estime = 0.0
 if 'lettre_generee' not in st.session_state: st.session_state.lettre_generee = ""
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
-# 2. STYLE CSS (Optimisé pour Apple et Lisibilité)
+# 2. STYLE CSS
 st.markdown("""
     <style>
     html, body, [data-testid="stAppViewContainer"] { background-color: #f4f7f9 !important; color: #333333 !important; }
@@ -51,7 +51,7 @@ if not st.session_state.authenticated:
         else: st.error("Code incorrect.")
     st.stop()
 
-# --- 3. EN-TÊTE VISUEL ---
+# --- 3. EN-TÊTE VISUEL (INTERFACE DU HAUT) ---
 st.markdown('<div class="header-box">', unsafe_allow_html=True)
 if os.path.exists("logo.png"):
     st.image("logo.png", width=250)
@@ -60,7 +60,7 @@ else:
 st.markdown("<p>DÉTECTION & PRÉVENTION CARDIOVASCULAIRE</p>", unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-# 4. BARRE LATÉRALE
+# 4. BARRE LATÉRALE (CHAMPS VIDES)
 with st.sidebar:
     st.header("👨‍⚕️ Praticien Référent")
     dr_nom = st.text_input("Nom du Docteur", placeholder="ex: Dr Pauline ROBERT")
@@ -105,50 +105,54 @@ with col_btn1:
 if st.session_state.cat_risque:
     st.success(f"Risque : {st.session_state.cat_risque} ({st.session_state.score_estime}%)")
 
-# 8. GÉNÉRATION DU COURRIER (PROMPT HAUTE PRÉCISION)
+# 8. GÉNÉRATION DU COURRIER (PROMPT SÉCURISÉ)
 with col_btn2:
     if st.button("📝 2. GÉNÉRER LE COURRIER"):
-        if not GROQ_API_KEY: st.error("Clé API manquante.")
-        elif not nom_p or not dr_nom: st.warning("Veuillez remplir les noms du praticien et du patient.")
+        if not GROQ_API_KEY:
+            st.error("Clé API manquante dans les Secrets Streamlit.")
+        elif not nom_p or not dr_nom:
+            st.warning("Veuillez remplir les noms du praticien et du patient.")
         else:
             try:
                 client = Groq(api_key=GROQ_API_KEY)
                 
-                # Prompt ultra-précis pour éviter les oublis
-                prompt = Tu es un assistant médical de haut niveau. 
-                Rédige une lettre de consultation formelle pour le Docteur {dr_nom}.
+                # Utilisation des triples guillemets pour éviter les erreurs de syntaxe Python
+                prompt = f"""Tu es un assistant médical. Rédige une lettre de consultation formelle pour le Docteur {dr_nom}.
                 Destinataire : {nom_p}.
                 
-                CONSIGNES STRICTES :
-                - Ne mets JAMAIS d'astérisques (*), de hashtags (#) ou de gras.
-                - Utilise un ton professionnel, clinique et bienveillant.
+                CONSIGNES :
+                - Ne mets JAMAIS d'asterisques, de hashtags ou de gras.
+                - Ton professionnel et clinique.
                 
-                CONTENU OBLIGATOIRE À INCLURE :
-                1. SALUTATION : 'Cher(e) {nom_p},'
-                2. OBJET : Stratification du risque cardiovasculaire selon le modèle SCORE2.
-                3. RAPPEL DES CONSTANTES (Vérifie bien ces chiffres) : 
+                CONTENU OBLIGATOIRE :
+                1. SALUTATION : Cher(e) {nom_p},
+                2. OBJET : Stratification du risque cardiovasculaire (SCORE2).
+                3. RAPPEL DES DONNÉES DE {nom_p} : 
                    - Tension artérielle : {systo_p} mmHg
                    - Cholestérol non-HDL : {chol_p} mmol/L
                    - Tabagisme : {fumeur_p}
                    - Statut Diabétique : {diabete_p}
                    - Fonction rénale (DFG) : {dfg_p}
-                4. BILAN DU RISQUE : Explique que le risque est '{st.session_state.cat_risque}' avec un score estimé à {st.session_state.score_estime}%.
-                5. PRÉCONISATIONS : Objectifs de LDL-cholestérol, activité physique régulière (150 min/semaine), mesures diététiques.
-                6. CONCLUSION ET SIGNATURE : 'Cordialement, {dr_nom}'.
-                7. CRÉDITS : 'Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert'."""
+                4. BILAN : Risque {st.session_state.cat_risque} avec un score estime a {st.session_state.score_estime}%.
+                5. PRÉCONISATIONS : Cible LDL-C, sport (150 min/sem), diététique.
+                6. SIGNATURE : Cordialement, {dr_nom}.
+                7. CRÉDITS : Application développée par Jennyfer Vari, Neli Ilieva et Pauline Robert."""
                 
-                completion = client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role": "user", "content": prompt}])
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant", 
+                    messages=[{"role": "user", "content": prompt}]
+                )
                 
-                # Nettoyage automatique des caractères spéciaux résiduels
-                texte_propre = completion.choices[0].message.content.replace('*', '').replace('#', '')
-                st.session_state.lettre_generee = texte_propre
+                # Nettoyage final des symboles
+                st.session_state.lettre_generee = completion.choices[0].message.content.replace('*', '').replace('#', '')
                 
-            except Exception as e: st.error(f"Erreur : {e}")
+            except Exception as e:
+                st.error(f"Erreur IA : {e}")
 
 if st.session_state.lettre_generee:
     st.info(st.session_state.lettre_generee)
 
-# 9. PDF PROFESSIONNEL (MISE EN PAGE TYPE COURRIER)
+# 9. PDF PROFESSIONNEL
 def create_pdf(text, dr, spe, cab, patient, age):
     pdf = FPDF()
     pdf.add_page()
@@ -162,24 +166,23 @@ def create_pdf(text, dr, spe, cab, patient, age):
     pdf.cell(0, 5, cab if cab else "", ln=True)
     pdf.ln(10)
     
-    # Bloc Patient décalé à droite
+    # Bloc Patient à droite
     pdf.set_font("Arial", 'B', 10)
     pdf.set_text_color(0, 0, 0)
     pdf.set_x(120)
     pdf.cell(0, 6, f"A l'attention de : {patient}", ln=True)
     pdf.set_x(120)
-    pdf.cell(0, 6, f"Âge : {age} ans", ln=True)
+    pdf.cell(0, 6, f"Age : {age} ans", ln=True)
     pdf.set_x(120)
     pdf.cell(0, 6, "Fait le : 13/05/2026", ln=True)
     pdf.ln(15)
     
-    # Corps du courrier
+    # Corps
     pdf.set_font("Arial", '', 11)
-    # Remplacement des caractères non-compatibles avec Latin-1
     clean_text = text.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 7, txt=clean_text)
     
-    # Signature en bas à droite
+    # Signature
     pdf.ln(20)
     pdf.set_font("Arial", 'I', 10)
     pdf.cell(0, 10, f"Signature et cachet du {dr} :", ln=True, align='R')
@@ -188,6 +191,7 @@ def create_pdf(text, dr, spe, cab, patient, age):
 
 if st.session_state.lettre_generee:
     pdf_data = create_pdf(st.session_state.lettre_generee, dr_nom, dr_spe, dr_cab, nom_p, age_p)
-    st.download_button("📥 TÉLÉCHARGER LE PDF PROFESSIONNEL", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
+    st.download_button("📥 TÉLÉCHARGER LE PDF COMPLET", data=pdf_data, file_name=f"CR_{nom_p}.pdf", mime="application/pdf")
 
+# 10. FOOTER
 st.markdown('<div class="footer-text">Projet L\'Alliance Protectrice | Créé par Jennyfer Vari, Neli Ilieva et Pauline Robert | © 2026</div>', unsafe_allow_html=True)
