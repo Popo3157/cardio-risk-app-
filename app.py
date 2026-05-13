@@ -5,7 +5,7 @@ from PIL import Image
 import os
 
 # --- SÉCURITÉ ET CLÉS ---
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 # Mot de passe que le médecin devra saisir pour protéger la clé API 
 SECRET_PASSWORD_MEDECIN = "Alliance2026"
 
